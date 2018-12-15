@@ -2,8 +2,10 @@
 -- Module Declaration
 --
 
-local mod = BigWigs:NewBoss("Lord Jaraxxus", 543, 1619)
+local mod = BigWigs:NewBoss("Lord Jaraxxus", 649, 1619)
 if not mod then return end
+mod:RegisterEnableMob(34780)
+--mod.engageId = 1087 -- Can fire repeatedly during a wipe
 mod.toggleOptions = {66237, {66197, "ICON", "FLASH"}, 66228, "adds", {66334, "FLASH"}, "berserk"}
 mod.optionHeaders = {
 	[66237] = "normal",
@@ -47,9 +49,9 @@ L = mod:GetLocale()
 --
 
 function mod:OnRegister()
-	self:RegisterEnableMob(34780)
-	self:RegisterEnableYell(L["enable_trigger"])
+	self:RegisterEvent("CHAT_MSG_MONSTER_YELL")
 end
+mod.OnBossDisable = mod.OnRegister
 
 function mod:OnBossEnable()
 	self:Log("SPELL_AURA_APPLIED", "IncinerateFlesh", 66237)
@@ -62,15 +64,9 @@ function mod:OnBossEnable()
 	self:Log("SPELL_AURA_REMOVED", "MistressKissRemoved", 66334)
 	self:Log("SPELL_INTERRUPT", "MistressKissInterrupted", 66335, 66359) -- debuff after getting interrupted
 
-	-- Only happens the first time we engage Jaraxxus, still 11 seconds left until he really engages.
-	self:Yell("FirstEngage", L["engage_trigger1"])
-	self:Yell("Engage", L["engage_trigger"])
+	self:RegisterEvent("CHAT_MSG_MONSTER_YELL")
 	self:RegisterEvent("PLAYER_REGEN_ENABLED", "CheckForWipe")
 	self:Death("Win", 34780)
-end
-
-function mod:FirstEngage()
-	self:Bar("adds", 12, L["engage"], "INV_Gizmo_01")
 end
 
 function mod:OnEngage()
@@ -84,18 +80,29 @@ end
 -- Event Handlers
 --
 
+function mod:CHAT_MSG_MONSTER_YELL(_, msg)
+	if msg == L.enable_trigger or msg:find(L.enable_trigger, nil, true) then
+		self:Enable()
+	elseif msg == L.engage_trigger1 or msg:find(L.engage_trigger1, nil, true) then
+		-- Only happens the first time we engage Jaraxxus, still 11 seconds left until he really engages.
+		self:Bar("adds", 12, L["engage"], "INV_Gizmo_01")
+	elseif msg == L.engage_trigger or msg:find(L.engage_trigger, nil, true) then
+		self:Engage()
+	end
+end
+
 function mod:IncinerateFlesh(args)
-	self:TargetMessage(args.spellId, args.destName, "Urgent", "Info", L["incinerate_message"])
+	self:TargetMessage(args.spellId, args.destName, "orange", "Info", L["incinerate_message"])
 	self:Bar(args.spellId, 12, L["incinerate_other"]:format(args.destName))
 end
 
 function mod:IncinerateFleshRemoved(args)
-	self:Message(args.spellId, "Positive", nil, L["incinerate_safe"]:format(args.destName), 17) -- Power Word: Shield icon.
+	self:Message(args.spellId, "green", nil, L["incinerate_safe"]:format(args.destName), 17) -- Power Word: Shield icon.
 	self:StopBar(L["incinerate_other"]:format(args.destName))
 end
 
 function mod:LegionFlame(args)
-	self:TargetMessage(args.spellId, args.destName, "Personal", "Alert", L["legionflame_message"])
+	self:TargetMessage(args.spellId, args.destName, "blue", "Alert", L["legionflame_message"])
 	if self:Me(args.destGUID) then
 		self:Flash(args.spellId)
 	end
@@ -105,24 +112,24 @@ end
 
 function mod:NetherPower(args)
 	if self:MobId(args.destGUID) == 34780 then
-		self:Message(args.spellId, "Attention")
+		self:Message(args.spellId, "yellow")
 		self:CDBar(args.spellId, 44)
 	end
 end
 
 function mod:NetherPortal(args)
-	self:Message("adds", "Urgent", "Alarm", args.spellId)
+	self:Message("adds", "orange", "Alarm", args.spellId)
 	self:Bar("adds", 60, L["infernal_bar"], 66258)
 end
 
 function mod:InfernalEruption(args)
-	self:Message("adds", "Urgent", "Alarm", args.spellId)
+	self:Message("adds", "orange", "Alarm", args.spellId)
 	self:Bar("adds", 60, L["netherportal_bar"], 66269)
 end
 
 function mod:MistressKiss(args)
 	if self:Me(args.destGUID) then
-		self:Message(args.spellId, "Personal", nil, L["kiss_message"])
+		self:Message(args.spellId, "blue", nil, L["kiss_message"])
 		self:Bar(args.spellId, 15, L["kiss_message"])
 		self:Flash(args.spellId)
 	end
@@ -136,7 +143,7 @@ end
 
 function mod:MistressKissInterrupted(args)
 	if self:Me(args.destGUID) then
-		self:Message(args.spellId, "Personal", nil, L["kiss_interrupted"])
+		self:Message(66334, "blue", nil, L["kiss_interrupted"])
 	end
 end
 

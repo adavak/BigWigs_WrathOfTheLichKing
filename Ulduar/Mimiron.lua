@@ -2,16 +2,12 @@
 -- Module Declaration
 --
 
-local mod = BigWigs:NewBoss("Mimiron", 529, 1647)
+local mod = BigWigs:NewBoss("Mimiron", 603, 1647)
 if not mod then return end
 -- Leviathan Mk II(33432), VX-001(33651), Aerial Command Unit(33670),
 mod:RegisterEnableMob(33350, 33432, 33651, 33670)
-mod.toggleOptions = {62997, 63631, {63274, "FLASH"}, 64444, 63811, 64623, 64570, "phase", "proximity", "berserk" }
-mod.optionHeaders = {
-	[62997] = "normal",
-	[64623] = "hard",
-	phase = "general",
-}
+mod.engageId = 1138
+mod.respawnTime = 31
 
 --------------------------------------------------------------------------------
 -- Locals
@@ -53,12 +49,9 @@ if L then
 
 	L.suppressant_warning = "Suppressant incoming!"
 
-	L.fbomb_soon = "Possible Frost Bomb soon!"
 	L.fbomb_bar = "Next Frost Bomb"
 
 	L.bomb_message = "Bomb Bot spawned!"
-
-	L.end_trigger = "^It would appear that I've made a slight miscalculation."
 end
 L = mod:GetLocale()
 
@@ -66,104 +59,107 @@ L = mod:GetLocale()
 -- Initialization
 --
 
-function mod:OnBossEnable()
-	self:Log("SPELL_CAST_START", "Plasma", 62997, 64529)
-	self:Log("SPELL_CAST_START", "Suppressant", 64570)
-	self:Log("SPELL_CAST_START", "FBomb", 64623)
-	self:Log("SPELL_CAST_START", "Shock", 63631)
-	self:Log("SPELL_CAST_SUCCESS", "Spinning", 63414)
-	self:Log("SPELL_SUMMON", "Magnetic", 64444)
-	self:Log("SPELL_SUMMON", "Bomb", 63811)
-	self:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_START", nil, "target", "focus")
-	self:RegisterEvent("PLAYER_REGEN_ENABLED", "CheckForWipe")
-	self:RegisterEvent("CHAT_MSG_LOOT")
-	self:Yell("Yells", L["engage_trigger"], L["hardmode_trigger"], L["phase2_trigger"], L["phase3_trigger"], L["phase4_trigger"])
-	self:Yell("Win", L["end_trigger"])
-	self:AddSyncListener("MimiLoot")
-	self:AddSyncListener("MimiBarrage")
+function mod:GetOptions()
+	return {
+		64529, -- Plasma Blast
+		63631, -- Shock Blast
+		{63274, "FLASH"}, -- P3Wx2 Laser Barrage
+		64444, -- Magnetic Core
+		63811, -- Bomb Bot
+		64623, -- Frost Bomb
+		64570, -- Flame Suppressant
+		"phase",
+		"proximity",
+		"berserk" ,
+	}, {
+		[64529] = "normal",
+		[64623] = -17610, -- Hard Mode
+		phase = "general",
+	}
 end
 
 function mod:VerifyEnable(unit)
-	return (UnitIsEnemy(unit, "player") and UnitCanAttack(unit, "player")) and true or false
+	return (UnitIsEnemy(unit, "player") and UnitHealth(unit) > 100) and true or false
+end
+
+function mod:OnBossEnable()
+	self:Log("SPELL_CAST_START", "PlasmaBlast", 64529)
+	self:Log("SPELL_CAST_START", "FlameSuppressant", 64570)
+	self:Log("SPELL_CAST_START", "FrostBomb", 64623)
+	self:Log("SPELL_CAST_START", "ShockBlast", 63631)
+	self:Log("SPELL_CAST_SUCCESS", "SpinningUp", 63414)
+	self:Log("SPELL_SUMMON", "MagneticCore", 64444)
+	self:Log("SPELL_SUMMON", "BombBot", 63811)
+	self:RegisterEvent("CHAT_MSG_LOOT")
+	self:RegisterEvent("CHAT_MSG_MONSTER_YELL")
+end
+
+function mod:OnEngage()
+	ishardmode = nil
+	phase = 1
+	self:Message("phase", "yellow", nil, L["engage_warning"], false)
+	self:Bar("phase", 7, L["phase_bar"]:format(phase), "INV_Gizmo_01")
+
+	self:Bar(63631, 30, L["shock_next"])
+	self:Bar(64529, 20, L["plasma_bar"])
+	self:DelayedMessage(64529, 17, "yellow", L["plasma_soon"])
 end
 
 --------------------------------------------------------------------------------
 -- Event Handlers
 --
 
-function mod:Bomb(args)
-	self:Message(args.spellId, "Important", "Alert", L["bomb_message"])
+function mod:BombBot(args)
+	self:Message(args.spellId, "red", "Alert", L["bomb_message"])
 end
 
-function mod:Suppressant(args)
-	self:Message(args.spellId, "Important", nil, L["suppressant_warning"])
+function mod:FlameSuppressant(args)
+	self:Message(args.spellId, "red", nil, L["suppressant_warning"])
 	self:Bar(args.spellId, 3)
 end
 
-function mod:FBomb(args)
-	self:Message(args.spellId, "Important")
+function mod:FrostBomb(args)
+	self:Message(args.spellId, "red")
 	self:Bar(args.spellId, 2)
 	self:Bar(args.spellId, 30, L["fbomb_bar"])
 end
 
-function mod:Plasma()
-	self:Message(62997, "Important", nil, L["plasma_warning"])
-	self:Bar(62997, 3, L["plasma_warning"])
-	self:Bar(62997, 30, L["plasma_bar"])
+function mod:PlasmaBlast(args)
+	self:Message(args.spellId, "red", nil, L["plasma_warning"])
+	self:Bar(args.spellId, 3, L["plasma_warning"])
+	self:Bar(args.spellId, 30, L["plasma_bar"])
 end
 
-function mod:Shock(args)
-	self:Message(args.spellId, "Important")
+function mod:ShockBlast(args)
+	self:Message(args.spellId, "red")
 	self:Bar(args.spellId, 3.5)
 	self:Bar(args.spellId, 34, L["shock_next"])
 end
 
-function mod:Spinning(args)
-	self:Message(63274, "Personal", "Long", L["laser_soon"], args.spellId)
+function mod:SpinningUp(args)
+	self:Message(63274, "blue", "Long", L["laser_soon"], args.spellId)
 	self:Flash(63274)
+	self:ScheduleTimer("Message", 4, 63274, "red", nil, L["laser_bar"])
+	self:ScheduleTimer("Bar", 4, 63274, 60, L["laser_bar"])
 end
 
-do
-	local laser = GetSpellInfo(63274)
-	function mod:UNIT_SPELLCAST_CHANNEL_START(unit, spell)
-		if spell == laser then
-			self:Sync("MimiBarrage")
-		end
-	end
-end
-
-function mod:Magnetic(args)
-	self:Message(args.spellId, "Important", nil, L["magnetic_message"])
+function mod:MagneticCore(args)
+	self:Message(args.spellId, "red", nil, L["magnetic_message"])
 	self:Bar(args.spellId, 15)
 end
 
-local function start()
-	ishardmode = nil
-	phase = 1
-	mod:Message("phase", "Attention", nil, L["engage_warning"], false)
-	mod:Bar("phase", 7, L["phase_bar"]:format(phase), "INV_Gizmo_01")
-
-	mod:Bar(63631, 30, L["shock_next"])
-	mod:Bar(62997, 20, L["plasma_bar"])
-	mod:DelayedMessage(62997, 17, "Attention", L["plasma_soon"])
-end
-
-function mod:Yells(msg)
+function mod:CHAT_MSG_MONSTER_YELL(_, msg)
 	if msg:find(L["hardmode_trigger"]) then
-		start()
 		ishardmode = true
 		self:Berserk(600, true)
 		self:OpenProximity("proximity", 5)
-		self:Engage()
 	elseif msg:find(L["engage_trigger"]) then
-		start()
 		self:Berserk(900, true)
-		self:Engage()
 	elseif msg:find(L["phase2_trigger"]) then
 		phase = 2
 		self:StopBar(L["plasma_bar"])
 		self:StopBar(L["shock_next"])
-		self:Message("phase", "Attention", nil, L["phase2_warning"], false)
+		self:Message("phase", "yellow", nil, L["phase2_warning"], false)
 		self:Bar("phase", 40, L["phase_bar"]:format(phase), "INV_Gizmo_01")
 		if ishardmode then
 			self:Bar(64623, 45, L["fbomb_bar"])
@@ -171,11 +167,11 @@ function mod:Yells(msg)
 		self:CloseProximity()
 	elseif msg:find(L["phase3_trigger"]) then
 		phase = 3
-		self:Message("phase", "Attention", nil, L["phase3_warning"], false)
+		self:Message("phase", "yellow", nil, L["phase3_warning"], false)
 		self:Bar("phase", 25, L["phase_bar"]:format(phase), "INV_Gizmo_01")
 	elseif msg:find(L["phase4_trigger"]) then
 		phase = 4
-		self:Message("phase", "Attention", nil, L["phase4_warning"], false)
+		self:Message("phase", "yellow", nil, L["phase4_warning"], false)
 		self:Bar("phase", 25, L["phase_bar"]:format(phase), "INV_Gizmo_01")
 		if ishardmode then
 			self:Bar(64623, 30, L["fbomb_bar"])
@@ -185,36 +181,11 @@ function mod:Yells(msg)
 end
 
 do
-	local lootItem = '^' .. LOOT_ITEM:gsub("%%s", "(.-)") .. '$'
-	local lootItemSelf = '^' .. LOOT_ITEM_SELF:gsub("%%s", "(.*)") .. '$'
-	function mod:CHAT_MSG_LOOT(event, msg)
-		local _, _, player, item = msg:find(lootItem)
-		if not player then
-			_, _, item = msg:find(lootItemSelf)
-			if item then
-				player = self:UnitName("player")
-			end
-		end
-
-		if type(item) == "string" and type(player) == "string" then
-			local _, itemLink, itemRarity = GetItemInfo(item)
-			if itemRarity and itemRarity == 1 and itemLink then
-				local _, _, itemId = itemLink:find("item:(%d+):")
-				if not itemId then return end
-				itemId = tonumber(itemId:trim())
-				if type(itemId) ~= "number" or itemId ~= 46029 then return end
-				self:Sync("MimiLoot", player)
-			end
+	-- WoW 7.0
+	--CHAT_MSG_LOOT:Varian receives loot: |cffffffff|Hitem:46029::::::::110:253::::::|h[Magnetic Core]|h|r.::::Varian::0:0::0:247:nil:0:false:false:false:false:
+	function mod:CHAT_MSG_LOOT(event, msg, _, _, _, playerName)
+		if msg:find("Hitem:46029", nil, true) then
+			self:TargetMessage(64444, playerName, "green", "Info")
 		end
 	end
 end
-
-function mod:OnSync(sync, rest, nick)
-	if sync == "MimiLoot" and rest then
-		self:TargetMessage(64444, rest, "Positive", "Info")
-	elseif sync == "MimiBarrage" then
-		self:Message(63274, "Important", nil, L["laser_bar"])
-		self:Bar(63274, 60, L["laser_bar"])
-	end
-end
-
